@@ -1,0 +1,5 @@
+watchdog
+pytesseract
+pdf2image
+Pillow
+PyPDF2
