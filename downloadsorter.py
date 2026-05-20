@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 DownloadSorter — автоматический органайзер папки загрузок.
 - Фото: распознаёт текст → категория → переименование
@@ -23,17 +22,17 @@ import pdf2image
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-# ---------- Настройки ----------
+
 WATCH_FOLDER = str(Path.home() / "Downloads")
 SORTED_ROOT = str(Path.home() / "Downloads" / "Sorted")
 DB_PATH = "sorter_index.db"
 
-# Расширения по типам
+
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.gif', '.webp'}
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.mpeg', '.mpg'}
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma'}
 
-# Категории (как раньше)
+
 CATEGORY_RULES = {
     "Финансы": ["счёт", "invoice", "квитанция", "чек", "оплата", "налог", "банк", "зарплата", "pay", "receipt"],
     "Билеты": ["билет", "ticket", "boarding", "посадочный", "рейс", "flight", "маршрут"],
@@ -42,7 +41,6 @@ CATEGORY_RULES = {
     "Документы": ["паспорт", "passport", "справка", "certificate", "диплом", "удостоверение"],
 }
 
-# ---------- База данных ----------
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -59,15 +57,15 @@ def sanitize_filename(name):
     Заменяет пробелы на _.
     Если имя становится пустым – возвращает 'file'.
     """
-    # Удаляем всё, кроме разрешённых символов (Unicode буквы/цифры, пробел, точка, дефис, подчёркивание)
+
     cleaned = re.sub(r'[^\w\s.\-]', '', name, flags=re.UNICODE)
-    # Заменяем пробелы и их последовательности на одиночное подчёркивание
+
     cleaned = re.sub(r'\s+', '_', cleaned)
-    # Точка в начале или конце в Windows нежелательна
+
     cleaned = cleaned.strip('.')
     return cleaned if cleaned else "file"
 
-# ---------- Извлечение текста ----------
+
 def extract_text_from_pdf(filepath):
     try:
         from PyPDF2 import PdfReader
@@ -79,7 +77,7 @@ def extract_text_from_pdf(filepath):
             return text
     except:
         pass
-    # fallback: OCR через картинки
+
     try:
         images = pdf2image.convert_from_path(filepath)
         full_text = []
@@ -113,7 +111,7 @@ def extract_text(filepath):
     else:
         return ""
 
-# ---------- Метаданные видео/аудио (через ffprobe) ----------
+
 def get_media_creation_time(filepath):
     """
     Пытается извлечь дату создания медиафайла через ffprobe.
@@ -127,7 +125,7 @@ def get_media_creation_time(filepath):
         )
         date_str = result.stdout.strip()
         if date_str:
-            # Ищем первую дату в формате YYYY-MM-DD
+
             match = re.search(r'\d{4}-\d{2}-\d{2}', date_str)
             if match:
                 return datetime.strptime(match.group(), '%Y-%m-%d')
@@ -135,7 +133,7 @@ def get_media_creation_time(filepath):
         pass
     return None
 
-# ---------- Категоризация по тексту ----------
+
 def categorize(text):
     text_lower = text.lower()
     for category, keywords in CATEGORY_RULES.items():
@@ -168,7 +166,7 @@ def extract_description(text, category):
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if lines:
         desc = lines[0][:60]
-        # Очищаем запрещённые символы
+
         return sanitize_filename(desc)
     return category
 
@@ -183,49 +181,49 @@ def rename_file(filepath, category, date_obj, text=None):
     ext = file.suffix
     date_str = date_obj.strftime("%Y-%m-%d") if date_obj else "бд"
 
-    # Очищаем оригинальное имя (на случай, если используем его)
+
     clean_stem = sanitize_filename(original_stem)
 
-    # Если имя уже содержит дату и выглядит осмысленным, не меняем (для видео/аудио)
+
     if (ext.lower() in VIDEO_EXTENSIONS or ext.lower() in AUDIO_EXTENSIONS) and len(clean_stem) > 5:
-        # Проверим, есть ли уже дата в имени (YYYY-MM-DD или DD.MM.YYYY и т.п.)
+
         if re.search(r'\d{4}[-.]\d{2}[-.]\d{2}', original_stem):
-            # Оставляем очищенное оригинальное имя, но без дублирования "Видео_"
+
             return f"{clean_stem}{ext}"
 
-    # Для остальных или если имя неинформативное – строим по формату
+
     if text and text.strip():
         desc = extract_description(text, category)
     else:
-        # Для медиа без текста: используем очищенное оригинальное имя
+
         desc = clean_stem if clean_stem != "file" else category
 
     base = f"{category}_{desc}_{date_str}{ext}"
-    # Обрезаем слишком длинное
+
     if len(base) > 100:
         base = f"{category}_{date_str}{ext}"
 
     return base
 
-# ---------- Главный обработчик файла ----------
+
 def sort_file(filepath, conn):
     print(f"Обрабатываю: {filepath}")
     if not os.path.isfile(filepath):
         return
-    time.sleep(2)  # ждём завершения записи
+    time.sleep(2)  
 
     ext = Path(filepath).suffix.lower()
 
-    # === ВИДЕО ===
+
     if ext in VIDEO_EXTENSIONS:
         category = "Видео"
         date_obj = get_media_creation_time(filepath)
         if not date_obj:
             date_obj = datetime.fromtimestamp(os.path.getmtime(filepath)).date()
-        text = None  # не индексируем текст видео
+        text = None  
         new_name = rename_file(filepath, category, date_obj, text)
 
-    # === АУДИО ===
+
     elif ext in AUDIO_EXTENSIONS:
         category = "Аудио"
         date_obj = get_media_creation_time(filepath)
@@ -233,7 +231,7 @@ def sort_file(filepath, conn):
             date_obj = datetime.fromtimestamp(os.path.getmtime(filepath)).date()
         new_name = rename_file(filepath, category, date_obj, text=None)
 
-    # === ФОТО ===
+
     elif ext in IMAGE_EXTENSIONS:
         text = extract_text(filepath)
         if text.strip():
@@ -244,7 +242,7 @@ def sort_file(filepath, conn):
             date_obj = datetime.fromtimestamp(os.path.getmtime(filepath)).date()
         new_name = rename_file(filepath, category, date_obj, text)
 
-    # === PDF, ТЕКСТ, ОСТАЛЬНОЕ ===
+
     else:
         try:
             text = extract_text(filepath)
@@ -258,12 +256,12 @@ def sort_file(filepath, conn):
             date_obj = datetime.fromtimestamp(os.path.getmtime(filepath)).date()
         new_name = rename_file(filepath, category, date_obj, text)
 
-    # --- Перемещение с проверкой коллизий ---
+
     dest_dir = Path(SORTED_ROOT) / category
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / new_name
 
-    # Если такой файл уже есть – добавляем счётчик
+
     counter = 1
     while dest_path.exists():
         stem = Path(new_name).stem
@@ -278,8 +276,6 @@ def sort_file(filepath, conn):
         print(f"  Ошибка перемещения: {e}")
         return
 
-    # --- Запись в базу (текст для поиска) ---
-    # Для поиска по видео/аудио используем имя, для остальных – извлечённый текст
     if ext in VIDEO_EXTENSIONS or ext in AUDIO_EXTENSIONS:
         text_snippet = f"{category}: {Path(filepath).name}"
     else:
@@ -290,7 +286,7 @@ def sort_file(filepath, conn):
               (Path(filepath).name, new_name, str(dest_path), text_snippet, datetime.now().isoformat()))
     conn.commit()
 
-# ---------- Наблюдатель за папкой ----------
+
 class DownloadHandler(FileSystemEventHandler):
     def __init__(self, db_conn):
         self.conn = db_conn
@@ -298,19 +294,19 @@ class DownloadHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
-        # Пропускаем временные файлы загрузок браузеров
+
         if event.src_path.endswith(('.crdownload', '.part', '.tmp')):
             return
         sort_file(event.src_path, self.conn)
 
-# ---------- Поиск по базе ----------
+
 def search_files(query, conn):
     c = conn.cursor()
     c.execute("SELECT new_name, path, date_added FROM files WHERE content LIKE ? OR new_name LIKE ?",
               (f'%{query}%', f'%{query}%'))
     return c.fetchall()
 
-# ---------- Разовый прогон существующих файлов ----------
+
 def process_existing(folder, conn):
     for root, dirs, files in os.walk(folder):
         for name in files:
@@ -319,7 +315,7 @@ def process_existing(folder, conn):
                 continue
             sort_file(filepath, conn)
 
-# ---------- Запуск ----------
+
 def main():
     conn = init_db()
     print("Обрабатываю существующие файлы...")
