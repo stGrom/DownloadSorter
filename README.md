@@ -27,5 +27,5 @@
 ### 1. Клонируйте репозиторий
 
 ```bash
-git clone https://github.com/yourname/DownloadSorter.git
+git clone https://github.com/stGrom/DownloadSorter.git
 cd DownloadSorter
